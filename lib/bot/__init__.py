@@ -1,11 +1,15 @@
-from discord import Intents
-from discord import Embed
 from random import choice
 from datetime import datetime
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 from discord.ext.commands import Bot as BotBase
 from discord.ext.commands import CommandNotFound
+from discord import Intents
+from discord import Embed
 
+from lib import db
 
 PREFIX = "?"
 OWNER_IDS = [216768190984749057]
@@ -17,6 +21,7 @@ class Bot(BotBase):
 		self.guild = None
 		self.scheduler = AsyncIOScheduler()
 
+		db.autosave(self.scheduler)
 		super().__init__(
 		command_prefix=PREFIX,
 		owner_ids=OWNER_IDS,
@@ -31,6 +36,10 @@ class Bot(BotBase):
 
 		print("running bot...")
 		super().run(self.TOKEN, reconnect=True)
+	
+	async def rules_reminder(self):
+		channel = self.get_channel(788234381327597589)
+		await channel.send("Remember to follow the rules!")
 
 	async def on_connect(self):
 		print("bot connected")
@@ -44,7 +53,7 @@ class Bot(BotBase):
 			
 		channel = self.get_channel(788234381327597589)
 		await channel.send("An Error occured.")
-		raise
+		#raise
 
 	async def on_command_error(self, ctx, exc):
 		if isinstance(exc, CommandNotFound):
@@ -58,7 +67,8 @@ class Bot(BotBase):
 		if not self.ready:
 			self.ready = True
 			self.guild = self.get_guild(788174344861646908)
-			print("bot ready")
+			self.scheduler.add_job(self.rules_reminder, CronTrigger(day_of_week=0, hour=12, minute=0, second=0))
+			self.scheduler.start()
 
 			channel = self.get_channel(788234381327597589)
 			#await channel.send("Bad boys, bad boys, watchu gonna do, watcha gonna do when they come for you")
@@ -79,6 +89,8 @@ class Bot(BotBase):
 			#embed.set_thumbnail(url=self.guild.icon_url)
 			#embed.set_image(url=self.guild.icon_url)
 			await channel.send(embed=embed)
+
+			print("bot ready")
 			
 
 		else:
