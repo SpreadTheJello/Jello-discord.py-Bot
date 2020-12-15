@@ -1,6 +1,12 @@
+import os
+import sys
+
 from random import choice
 from datetime import datetime
 
+from glob import glob
+
+from asyncio import sleep
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -9,15 +15,29 @@ from discord.ext.commands import CommandNotFound
 from discord import Intents
 from discord import Embed
 
-from lib import db
+from ..db import db
 
 PREFIX = "?"
 OWNER_IDS = [216768190984749057]
+COGS = [path.split("/")[-1][:-3] for path in glob("./lib/cogs/*.py")]
+
+class Ready(object):
+	def __init__(self):
+		for cog in COGS:
+			setattr(self, cog, False)
+
+	def ready_up(self, cog):
+		setattr(self, cog, True)
+		print(f"  {cog} cog ready")
+
+	def all_ready(self):
+		return all([getattr(self, cog) for cog in COGS])
 
 class Bot(BotBase):
 	def __init__(self):
 		self.PREFIX = PREFIX
 		self.ready = False
+		self.cogs_ready = Ready()
 		self.guild = None
 		self.scheduler = AsyncIOScheduler()
 
@@ -28,8 +48,18 @@ class Bot(BotBase):
 		intents=Intents.all(),
 		)
 
+	def setup(self):
+		for cog in COGS:
+			self.load_extension(f"lib.cogs.{cog}")
+			print(f"  {cog} cog loaded")
+
+		print("setup complete")
+
 	def run(self, version):
 		self.VERSION = version
+
+		print("running setup...")
+		self.setup()
 
 		with open("./lib/bot/token.0", "r", encoding="utf-8") as tf:
 			self.TOKEN = tf.read()
@@ -38,11 +68,11 @@ class Bot(BotBase):
 		super().run(self.TOKEN, reconnect=True)
 	
 	async def rules_reminder(self):
-		channel = self.get_channel(788234381327597589)
-		await channel.send("Remember to follow the rules!")
+		#channel = self.get_channel(788234381327597589)
+		await self.stdout.send("Remember to follow the rules!")
 
 	async def on_connect(self):
-		print("bot connected")
+		print("  bot connected")
 		
 	async def on_disconnect(self):
 		print("bot disconnected")
@@ -51,8 +81,8 @@ class Bot(BotBase):
 		if err == "on_command_error":
 			await args[0].send("Something went wrong.")
 			
-		channel = self.get_channel(788234381327597589)
-		await channel.send("An Error occured.")
+		#channel = self.get_channel(788234381327597589)
+		await self.stdout.send("An Error occured.")
 		#raise
 
 	async def on_command_error(self, ctx, exc):
@@ -64,13 +94,13 @@ class Bot(BotBase):
 			raise exc
 
 	async def on_ready(self):
-		if not self.ready:
-			self.ready = True
+		if not self.ready:			
 			self.guild = self.get_guild(788174344861646908)
+			self.stdout = self.get_channel(788234381327597589)
 			self.scheduler.add_job(self.rules_reminder, CronTrigger(day_of_week=0, hour=12, minute=0, second=0))
 			self.scheduler.start()
 
-			channel = self.get_channel(788234381327597589)
+			#channel = self.get_channel(788234381327597589)
 			#await channel.send("Bad boys, bad boys, watchu gonna do, watcha gonna do when they come for you")
 
 			quotes = ["Jump up and down like you're a pancake.",
@@ -88,9 +118,13 @@ class Bot(BotBase):
 			embed.set_footer(text="Quotes by Isaac")
 			#embed.set_thumbnail(url=self.guild.icon_url)
 			#embed.set_image(url=self.guild.icon_url)
-			await channel.send(embed=embed)
 
-			print("bot ready")
+			while not self.cogs_ready.all_ready():
+				await sleep(0.5)
+
+			await self.stdout.send(embed=embed)
+			self.ready = True
+			print("  bot ready")
 			
 
 		else:
